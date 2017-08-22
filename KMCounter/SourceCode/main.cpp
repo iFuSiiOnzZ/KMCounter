@@ -17,6 +17,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+typedef enum tray_menu_options_e
+{
+    Exit,
+    CloseThisMenu
+} tray_menu_options_e;
+
+///////////////////////////////////////////////////////////////////////////////
+
 typedef struct keyboard_t
 {
     size_t Hits;
@@ -37,7 +45,7 @@ typedef struct kmcounter_t
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static kmcounter_t g_KMCounter = { 0 }; /* Count the keyboard and mouse hits*/
+static kmcounter_t g_KMCounter = { 0 }; /* Count the keyboard and mouse hits */
 static int g_AtomianGuardExit  =     0; /* Exit app control */
 static HMENU g_hTrayWnd        =     0; /* Tray menu window */
 
@@ -115,8 +123,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
         g_hTrayWnd = CreatePopupMenu();
         ShowWindow(GetConsoleWindow(), SW_HIDE);
 
-        AddMenu(g_hTrayWnd, 0, "Close this menu");
-        AddMenu(g_hTrayWnd, 1, "Exit KMCounter");
+        AddMenu(g_hTrayWnd, tray_menu_options_e::CloseThisMenu, "Close this menu");
+        AddMenu(g_hTrayWnd, tray_menu_options_e::Exit, "Exit KMCounter");
 
         return 0;
     }
@@ -133,8 +141,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
         POINT CursorPos = { 0 };
         GetCursorPos(&CursorPos);
 
-        int MenuClicked = TrackPopupMenu(g_hTrayWnd, TPM_RETURNCMD | TPM_NONOTIFY, CursorPos.x, CursorPos.y, 0, hWnd, NULL);
-        if (MenuClicked == 1) { DestroyMenu(g_hTrayWnd); g_AtomianGuardExit = 1; }
+        switch (TrackPopupMenu(g_hTrayWnd, TPM_RETURNCMD | TPM_NONOTIFY, CursorPos.x, CursorPos.y, 0, hWnd, NULL))
+        {
+            case tray_menu_options_e::Exit:
+            {
+                DestroyMenu(g_hTrayWnd);
+                g_AtomianGuardExit = 1;
+            } break;
+
+            case tray_menu_options_e::CloseThisMenu:
+            {
+                // NOTE(Andrei): Don't do nothing
+            } break;
+        }
 
         return 0;
     }
