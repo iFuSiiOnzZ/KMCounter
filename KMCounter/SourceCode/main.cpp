@@ -1,4 +1,5 @@
 #include "Win32\TrayIcon.h"
+#include "Win32\FileUtils.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -20,6 +21,7 @@
 typedef enum tray_menu_options_e
 {
     Exit,
+    Statistics,
     CloseThisMenu
 } tray_menu_options_e;
 
@@ -45,9 +47,11 @@ typedef struct kmcounter_t
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static kmcounter_t g_KMCounter = { 0 }; /* Count the keyboard and mouse hits */
-static int g_AtomianGuardExit  =     0; /* Exit app control */
-static HMENU g_hTrayWnd        =     0; /* Tray menu window */
+std::vector<kmcounter_t> g_KMCounterStatistics; /* Usage statistics of the user input */
+static kmcounter_t g_KMCounter = { 0 };         /* Count the keyboard and mouse hits */
+
+static int g_AtomianGuardExit  =     0;         /* Exit app control */
+static HMENU g_hTrayWnd        =     0;         /* Tray menu window */
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -124,7 +128,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
         ShowWindow(GetConsoleWindow(), SW_HIDE);
 
         AddMenu(g_hTrayWnd, tray_menu_options_e::CloseThisMenu, "Close this menu");
-        AddMenu(g_hTrayWnd, tray_menu_options_e::Exit, "Exit KMCounter");
+        AddMenu(g_hTrayWnd, tray_menu_options_e::Statistics, "Statistics");
 
         return 0;
     }
@@ -199,6 +203,18 @@ int main(int argc, char *argv[])
     UpdateWindow(hWnd);
 
     MSG hMsg = { 0 };
+    s_file_content statisticsData = CFileUtils::LoadFileIntoMemory("statistics.dat");
+
+    if (statisticsData.Size)
+    {
+        size_t numElements = statisticsData.Size / sizeof(kmcounter_t);
+        g_KMCounterStatistics.resize(numElements);
+
+        for (size_t i = 0; i < numElements; ++i)
+        {
+            g_KMCounterStatistics[i] = ((kmcounter_t *)statisticsData.Memory)[i];
+        }
+    }
 
     NOTIFYICONDATA TrayIcon = { 0 };
     CWin32TrayIcon::EnableIcon(&TrayIcon, hWnd, TRY_ICON_ID, "KMCounter");
@@ -228,5 +244,12 @@ int main(int argc, char *argv[])
     CWin32TrayIcon::DisableIcon(&TrayIcon);
     UnregisterClass(CLASS_NAME, GetModuleHandle(NULL));
 
+    s_file_content fileContent =
+    {
+        &g_KMCounter,
+        sizeof(g_KMCounter)
+    };
+
+    CFileUtils::WriteFileContentIntoDisk(fileContent, "statistics.dat", CFileUtils::Append);
     return EXIT_SUCCESS;
 }

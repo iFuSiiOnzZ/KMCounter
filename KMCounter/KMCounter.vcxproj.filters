@@ -21,9 +21,15 @@
     <ClCompile Include="SourceCode\Win32\TrayIcon.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SourceCode\Win32\FileUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SourceCode\Win32\TrayIcon.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SourceCode\Win32\FileUtils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
