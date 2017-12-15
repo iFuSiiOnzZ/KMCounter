@@ -20,9 +20,15 @@
 
 typedef enum tray_menu_options_e
 {
-    Exit,
-    Statistics,
-    CloseThisMenu
+    Menu_Exit,
+    Menu_Close,
+    Menu_Statistics,
+
+    /*
+        NOTE(Andrei): All the options have to go
+        above this comment.
+    */
+    Menu_Counter
 } tray_menu_options_e;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -88,6 +94,11 @@ void AddMenu(HMENU hMenu, int Id, char *WndText)
     InsertMenuItem(hMenu, GetMenuItemCount(hMenu), true, &MenuItem);
 }
 
+void AddMenuSeparator(HMENU hMenu)
+{
+    InsertMenu(hMenu, GetMenuItemCount(hMenu), MF_SEPARATOR | MF_BYPOSITION, 0, NULL);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wp, LPARAM lp)
@@ -127,8 +138,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
         g_hTrayWnd = CreatePopupMenu();
         ShowWindow(GetConsoleWindow(), SW_HIDE);
 
-        AddMenu(g_hTrayWnd, tray_menu_options_e::CloseThisMenu, "Close this menu");
-        AddMenu(g_hTrayWnd, tray_menu_options_e::Statistics, "Statistics");
+        AddMenu(g_hTrayWnd, tray_menu_options_e::Menu_Close, "Close this menu");
+        AddMenu(g_hTrayWnd, tray_menu_options_e::Menu_Exit, "Exit KMCounter");
+
+        AddMenuSeparator(g_hTrayWnd);
+        AddMenu(g_hTrayWnd, tray_menu_options_e::Menu_Statistics, "Statistics");
 
         return 0;
     }
@@ -147,15 +161,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
 
         switch (TrackPopupMenu(g_hTrayWnd, TPM_RETURNCMD | TPM_NONOTIFY, CursorPos.x, CursorPos.y, 0, hWnd, NULL))
         {
-            case tray_menu_options_e::Exit:
+            case tray_menu_options_e::Menu_Exit:
             {
                 DestroyMenu(g_hTrayWnd);
                 g_AtomianGuardExit = 1;
             } break;
 
-            case tray_menu_options_e::CloseThisMenu:
+            case tray_menu_options_e::Menu_Close:
             {
                 // NOTE(Andrei): Don't do nothing
+            } break;
+
+            //////////////////////////////////////////////////////////////////////////
+
+            case tray_menu_options_e::Menu_Statistics:
+            {
+                MessageBoxA(NULL, "Show a graph with the user statistics, or anything else", "NOT IMPLEMENTED", MB_OK);
             } break;
         }
 
