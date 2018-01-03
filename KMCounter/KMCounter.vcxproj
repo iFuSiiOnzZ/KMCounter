@@ -152,11 +152,15 @@
   <ItemGroup>
     <ClCompile Include="SourceCode\main.cpp" />
     <ClCompile Include="SourceCode\Win32\FileUtils.cpp" />
+    <ClCompile Include="SourceCode\Win32\ScreenUtils.cpp" />
     <ClCompile Include="SourceCode\Win32\TrayIcon.cpp" />
+    <ClCompile Include="SourceCode\Win32\WindowUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="SourceCode\Win32\FileUtils.h" />
+    <ClInclude Include="SourceCode\Win32\ScreenUtils.h" />
     <ClInclude Include="SourceCode\Win32\TrayIcon.h" />
+    <ClInclude Include="SourceCode\Win32\WindowUtils.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resources\resource.rc" />

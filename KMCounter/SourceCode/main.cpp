@@ -1,6 +1,9 @@
 #include "Win32\TrayIcon.h"
 #include "Win32\FileUtils.h"
 
+#include "Win32\ScreenUtils.h"
+#include "Win32\WindowUtils.h"
+
 ///////////////////////////////////////////////////////////////////////////////
 
 #include <string>
@@ -10,6 +13,10 @@
 
 #define  CLASS_NAME "KMCounter"
 #define WINDOW_NAME "KMCounter"
+
+#define WINDOW_WIDTH  640
+#define WINDOW_HEIGHT 360
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -47,11 +54,18 @@ typedef struct mouse_t
 
 typedef struct kmcounter_t
 {
+    FILETIME StartTime;
+    FILETIME EndTime;
+
     keyboard_t Kyeboard;
     mouse_t Mouse;
 } kmcounter_t;
 
 ///////////////////////////////////////////////////////////////////////////////
+static s_offscreen_buffer g_BackBuffer = { 0 };
+static bool g_ShowStatistics = false;
+static int g_StatisticsPos = -1;
+
 
 std::vector<kmcounter_t> g_KMCounterStatistics; /* Usage statistics of the user input */
 static kmcounter_t g_KMCounter = { 0 };         /* Count the keyboard and mouse hits */
@@ -77,9 +91,17 @@ std::string GetInfoAsString()
     return s;
 }
 
+size_t GetTotalHits(const kmcounter_t &KMCounter)
+{
+    size_t TotalMouseHists = KMCounter.Mouse.HitsLeftButton + KMCounter.Mouse.HitsRightButton + KMCounter.Mouse.HitsCentralButton;
+    size_t TotalHists = TotalMouseHists + KMCounter.Kyeboard.Hits;
+
+    return TotalHists;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
-void AddMenu(HMENU hMenu, int Id, char *WndText)
+int AddMenu(HMENU hMenu, int Id, char *WndText)
 {
     MENUITEMINFO MenuItem = { 0 };
     MenuItem.cbSize = sizeof(MenuItem);
@@ -91,12 +113,23 @@ void AddMenu(HMENU hMenu, int Id, char *WndText)
     MenuItem.dwTypeData = (char *)WndText;
     MenuItem.wID = Id;
 
-    InsertMenuItem(hMenu, GetMenuItemCount(hMenu), true, &MenuItem);
+    int MenuPos = GetMenuItemCount(hMenu);
+    InsertMenuItemA(hMenu, MenuPos, true, &MenuItem);
+
+    return MenuPos;
 }
 
-void AddMenuSeparator(HMENU hMenu)
+int AddMenuSeparator(HMENU hMenu)
 {
-    InsertMenu(hMenu, GetMenuItemCount(hMenu), MF_SEPARATOR | MF_BYPOSITION, 0, NULL);
+    int MenuPos = GetMenuItemCount(hMenu);
+    InsertMenuA(hMenu, MenuPos, MF_SEPARATOR | MF_BYPOSITION, 0, NULL);
+
+    return MenuPos;
+}
+
+void UpdateMenu(HMENU hMenu, int MenuPos, int Id, char *WndText)
+{
+    ModifyMenu(hMenu, MenuPos, MF_BYPOSITION | MF_STRING, Id, WndText);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -142,7 +175,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
         AddMenu(g_hTrayWnd, tray_menu_options_e::Menu_Exit, "Exit KMCounter");
 
         AddMenuSeparator(g_hTrayWnd);
-        AddMenu(g_hTrayWnd, tray_menu_options_e::Menu_Statistics, "Statistics");
+        g_StatisticsPos = AddMenu(g_hTrayWnd, tray_menu_options_e::Menu_Statistics, "Show statistics");
 
         return 0;
     }
@@ -153,6 +186,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
 
         g_AtomianGuardExit = 1;
         return 0;
+    }
+    else if (Msg == WM_PAINT)
+    {
+        PAINTSTRUCT Paint = { 0 };
+        HDC DeviceContext = BeginPaint(hWnd, &Paint);
+
+        s_window_dimensions d = CScreenUtils::GetWindowDimension(hWnd);
+        CScreenUtils::ResizeBIBSection(&g_BackBuffer, d.Width, d.Height);
+        CScreenUtils::DisplayBuffer(&g_BackBuffer, DeviceContext, d.Width, d.Height);
+
+        EndPaint(hWnd, &Paint);
     }
     else if (Msg == TRY_ICON_ID && lp == WM_RBUTTONDOWN)
     {
@@ -176,15 +220,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
 
             case tray_menu_options_e::Menu_Statistics:
             {
-                MessageBoxA(NULL, "Show a graph with the user statistics, or anything else", "NOT IMPLEMENTED", MB_OK);
+                g_ShowStatistics = !g_ShowStatistics;
+                ShowWindow(hWnd, g_ShowStatistics ? SW_SHOW : SW_HIDE);
+
+                char *TryMenuText = g_ShowStatistics ? "Hide statistics" : "Show statistics";
+                UpdateMenu(g_hTrayWnd, g_StatisticsPos, tray_menu_options_e::Menu_Statistics, TryMenuText);
             } break;
         }
 
         return 0;
-    }
-    else if (Msg == TRY_ICON_ID)
-    {
-
     }
 
     return DefWindowProcA(hWnd, Msg, wp, lp);
@@ -192,6 +236,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT Msg, WPARAM wp, LPARAM lp)
 
 int main(int argc, char *argv[])
 {
+    GetSystemTimeAsFileTime(&g_KMCounter.StartTime);
     WNDCLASSEXA WndCls = { 0 };
 
     WndCls.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
@@ -209,10 +254,13 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    int StartX = GetSystemMetrics(SM_CXSCREEN) / 2 - WINDOW_WIDTH  / 2;
+    int StartY = GetSystemMetrics(SM_CYSCREEN) / 2 - WINDOW_HEIGHT / 2;
+
     HWND hWnd = CreateWindowExA
     (
-        WS_EX_CLIENTEDGE, CLASS_NAME, WINDOW_NAME, WS_OVERLAPPEDWINDOW, 0, 0,
-        50, 50, HWND_DESKTOP, NULL, GetModuleHandle(0), NULL
+        WS_EX_CLIENTEDGE, CLASS_NAME, WINDOW_NAME, WS_OVERLAPPEDWINDOW, StartX, StartY,
+        WINDOW_WIDTH, WINDOW_HEIGHT, HWND_DESKTOP, NULL, GetModuleHandle(0), NULL
     );
 
     if (hWnd == NULL)
@@ -220,10 +268,15 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    CWindowUtils::DisableCloseButton(hWnd);
+    CWindowUtils::DisableMaximizeButton(hWnd);
+    CWindowUtils::DisableMinimizeButton(hWnd);
+
     ShowWindow(hWnd, SW_HIDE);
     UpdateWindow(hWnd);
 
     MSG hMsg = { 0 };
+    HDC DeviceContext = GetDC(hWnd);
     s_file_content statisticsData = CFileUtils::LoadFileIntoMemory("statistics.dat");
 
     if (statisticsData.Size)
@@ -237,11 +290,21 @@ int main(int argc, char *argv[])
         }
     }
 
+    g_KMCounterStatistics.push_back(g_KMCounter);
+    std::vector<s_color> statisticsColors(g_KMCounterStatistics.size(), s_color{ 1.0f, 1.0f, 1.0f });
+
+    for (size_t i = 0; i < statisticsColors.size() - 1; ++i)
+    {
+        statisticsColors[i].r = (float)rand() / (RAND_MAX + 1.0f);
+        statisticsColors[i].g = (float)rand() / (RAND_MAX + 1.0f);
+        statisticsColors[i].b = (float)rand() / (RAND_MAX + 1.0f);
+    }
+
     NOTIFYICONDATA TrayIcon = { 0 };
     CWin32TrayIcon::EnableIcon(&TrayIcon, hWnd, TRY_ICON_ID, "KMCounter");
 
     HHOOK KbdHook = SetWindowsHookExA(WH_KEYBOARD_LL, (HOOKPROC)LowLevelKeyboardProc, GetModuleHandle(NULL), NULL);
-    HHOOK MouseHook = SetWindowsHookExA(WH_MOUSE_LL , (HOOKPROC)LowLevelMouseProc   , GetModuleHandle(NULL), NULL);
+    HHOOK MouseHook = SetWindowsHookExA(WH_MOUSE_LL, (HOOKPROC)LowLevelMouseProc, GetModuleHandle(NULL), NULL);
 
     while (!g_AtomianGuardExit)
     {
@@ -254,16 +317,50 @@ int main(int argc, char *argv[])
         const std::string &s = GetInfoAsString();
         CWin32TrayIcon::UpdateTip(&TrayIcon, s.c_str());
 
+        if (g_ShowStatistics)
+        {
+            CScreenUtils::ClearBuffer(&g_BackBuffer, 0.0f, 0.0f, 0.0f);
+            s_window_dimensions d = CScreenUtils::GetWindowDimension(hWnd);
+
+            g_KMCounterStatistics[g_KMCounterStatistics.size() - 1] = g_KMCounter;
+            float MaxHits = 0.0f, StartX = 0.0f, space = (float)d.Width / (float)g_KMCounterStatistics.size();
+
+            for (size_t i = 0; i < g_KMCounterStatistics.size(); ++i)
+            {
+                float f = (float)GetTotalHits(g_KMCounterStatistics[i]);
+                MaxHits = f < MaxHits ? MaxHits : f;
+            }
+
+            for (size_t i = 0; i < g_KMCounterStatistics.size(); ++i)
+            {
+                float CurrentHeight = (float)GetTotalHits(g_KMCounterStatistics[i]) / MaxHits - 0.01f;
+
+                s_point StartPoint{ StartX, d.Height - CurrentHeight * d.Height };
+                s_point EndPoint{ StartX + space, (float) d.Height };
+
+                float r = statisticsColors[i].r;
+                float g = statisticsColors[i].g;
+                float b = statisticsColors[i].b;
+
+                CScreenUtils::DrawRectangle(&g_BackBuffer, StartPoint, EndPoint, r, g, b);
+                StartX += space;
+            }
+
+            CScreenUtils::DisplayBuffer(&g_BackBuffer, DeviceContext, d.Width, d.Height);
+        }
+
         // NOTE(Andrei): Don't waste CPU time
         Sleep(10);
     }
 
     DestroyWindow(hWnd);
+    UnregisterClass(CLASS_NAME, GetModuleHandle(NULL));
+
     UnhookWindowsHookEx(KbdHook);
     UnhookWindowsHookEx(MouseHook);
 
     CWin32TrayIcon::DisableIcon(&TrayIcon);
-    UnregisterClass(CLASS_NAME, GetModuleHandle(NULL));
+    GetSystemTimeAsFileTime(&g_KMCounter.EndTime);
 
     s_file_content fileContent =
     {
